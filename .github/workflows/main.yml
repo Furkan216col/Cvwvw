@@ -29,12 +29,46 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Build APK with Buildozer
+      - name: Cache Buildozer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.gradle
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-
+
+      - name: Validate buildozer.spec
+        run: test -f buildozer.spec || (echo "HATA: buildozer.spec bulunamadi!" && exit 1)
+
+      - name: Set Android Environment Variables
         run: |
-          yes | buildozer -v android debug
+          echo "ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/tools:$HOME/.buildozer/android/platform/android-sdk/platform-tools" >> $GITHUB_ENV
+
+      - name: Accept Android Licenses
+        run: |
+          mkdir -p ~/.android
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.android/repositories.cfg
+          yes | buildozer android debug 2>/dev/null || true
+
+      - name: Build APK with Buildozer
+        run: buildozer -v android debug
+
+      - name: Check APK exists
+        run: |
+          if ls bin/*.apk 1>/dev/null 2>&1; then
+            echo "APK basariyla olusturuldu:"
+            ls -lh bin/*.apk
+          else
+            echo "HATA: APK olusturulamadi!"
+            exit 1
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: jarvis-debug-apk
           path: bin/*.apk
+          retention-days: 7
